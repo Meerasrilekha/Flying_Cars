@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Flying Car Swarm Simulation</title>
+  <style>
+    :root {
+      --sky-day: linear-gradient(to top, #b3d1ff, #e6f2ff);
+      --sky-night: linear-gradient(to top, #0b0f29, #1a1a40);
+      --panel-bg-day: rgba(30, 30, 30, 0.85);
+      --panel-bg-night: rgba(255, 255, 255, 0.1);
+      --panel-text-day: #fff;
+      --panel-text-night: #ccc;
+    }
+
+    body {
+      margin: 0;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background: var(--sky-day);
+      overflow: hidden;
+      transition: background 1s ease;
+    }
+
+    canvas {
+      display: block;
+    }
+
+    #controlPanel {
+      position: absolute;
+      top: 20px;
+      left: 20px;
+      background: var(--panel-bg-day);
+      color: var(--panel-text-day);
+      padding: 20px;
+      border-radius: 12px;
+      box-shadow: 0 0 15px rgba(0, 0, 0, 0.3);
+      z-index: 10;
+      font-size: 14px;
+      transition: background 0.5s, color 0.5s;
+    }
+
+    #controlPanel label {
+      display: block;
+      margin-bottom: 10px;
+    }
+
+    #controlPanel input,
+    #controlPanel select {
+      width: 100%;
+      padding: 6px;
+      margin-top: 4px;
+      border-radius: 4px;
+      border: none;
+      outline: none;
+    }
+
+    #controlPanel button {
+      width: 100%;
+      padding: 10px;
+      background: linear-gradient(to right, #00d2ff, #3a7bd5);
+      color: white;
+      font-weight: bold;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+      margin-top: 10px;
+    }
+
+    #controlPanel button:hover {
+      background: linear-gradient(to right, #0072ff, #00c6ff);
+    }
+
+    .cloud {
+      position: absolute;
+      background: #fff;
+      border-radius: 50%;
+      filter: blur(8px);
+      opacity: 0.8;
+      animation: floatClouds 60s linear infinite;
+    }
+
+    @keyframes floatClouds {
+      from {
+        transform: translateX(-200px);
+      }
+      to {
+        transform: translateX(110vw);
+      }
+    }
+
+    .sun {
+      position: absolute;
+      top: 100px;
+      right: 150px;
+      width: 80px;
+      height: 80px;
+      background: radial-gradient(circle, #ffff66, #ffaa00);
+      border-radius: 50%;
+      box-shadow: 0 0 60px #ffaa00;
+      z-index: 1;
+    }
+
+    .stars {
+      position: absolute;
+      width: 100%;
+      height: 100%;
+      top: 0;
+      left: 0;
+      pointer-events: none;
+      background: transparent;
+      z-index: 0;
+    }
+
+    .star {
+      position: absolute;
+      background: white;
+      border-radius: 50%;
+      width: 2px;
+      height: 2px;
+      opacity: 0.8;
+      animation: twinkle 2s infinite ease-in-out alternate;
+    }
+
+    @keyframes twinkle {
+      from {
+        opacity: 0.3;
+      }
+      to {
+        opacity: 1;
+      }
+    }
+
+    .ground {
+      position: absolute;
+      bottom: 0;
+      width: 100%;
+      height: 100px;
+      background: linear-gradient(to top, #a0c26e, transparent);
+      z-index: 0;
+    }
+  </style>
+</head>
+<body>
+
+<div id="skyObjects">
+  <div class="sun" id="sun"></div>
+  <div class="stars" id="stars"></div>
+</div>
+
+<div class="cloud" style="top: 120px; left: 0; width: 100px; height: 60px;"></div>
+<div class="cloud" style="top: 200px; left: -150px; width: 150px; height: 80px; animation-delay: 15s;"></div>
+<div class="cloud" style="top: 80px; left: -100px; width: 120px; height: 70px; animation-delay: 30s;"></div>
+<div class="ground"></div>
+
+<div id="controlPanel">
+  <label>
+    No. of Cars:
+    <input type="number" id="numCars" value="5" min="1" max="20">
+  </label>
+
+  <label>
+    Weather:
+    <select id="weather">
+      <option value="clear">Clear</option>
+      <option value="rain">Rain</option>
+      <option value="fog">Fog</option>
+      <option value="wind">Wind</option>
+    </select>
+  </label>
+
+  <label>
+    <input type="checkbox" id="nightModeToggle" onchange="toggleNightMode()"> Night Mode
+  </label>
+
+  <button onclick="startDynamicSim()">Start Dynamic Simulation</button>
+  <button onclick="stopSim()">Stop Simulation</button>
+</div>
+
+<canvas id="canvas"></canvas>
+
+<script>
+  const canvas = document.getElementById('canvas');
+  const ctx = canvas.getContext('2d');
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
+
+  const starsContainer = document.getElementById('stars');
+  for (let i = 0; i < 100; i++) {
+    const star = document.createElement('div');
+    star.classList.add('star');
+    star.style.top = `${Math.random() * 100}%`;
+    star.style.left = `${Math.random() * 100}%`;
+    starsContainer.appendChild(star);
+  }
+
+  let simulationFrames = [];
+  let currentFrame = 0;
+  let isSimulating = false;
+  let dynamicSimInterval;
+  let isNight = false;
+
+  function toggleNightMode() {
+    isNight = document.getElementById('nightModeToggle').checked;
+    document.body.style.background = isNight
+      ? getComputedStyle(document.documentElement).getPropertyValue('--sky-night')
+      : getComputedStyle(document.documentElement).getPropertyValue('--sky-day');
+
+    const controlPanel = document.getElementById('controlPanel');
+    controlPanel.style.background = isNight
+      ? getComputedStyle(document.documentElement).getPropertyValue('--panel-bg-night')
+      : getComputedStyle(document.documentElement).getPropertyValue('--panel-bg-day');
+    controlPanel.style.color = isNight
+      ? getComputedStyle(document.documentElement).getPropertyValue('--panel-text-night')
+      : getComputedStyle(document.documentElement).getPropertyValue('--panel-text-day');
+
+    document.getElementById('sun').style.display = isNight ? 'none' : 'block';
+    document.getElementById('stars').style.display = isNight ? 'block' : 'none';
+  }
+
+  function randomPoint() {
+    return [
+      Math.random() * 1000,
+      Math.random() * 600,
+      Math.random() * 200
+    ];
+  }
+
+  function generateRandomCars(n) {
+    const starts = [];
+    const ends = [];
+    for (let i = 0; i < n; i++) {
+      starts.push(randomPoint());
+      ends.push(randomPoint());
+    }
+    return { starts, ends };
+  }
+
+  function drawFlyingCar(ctx, x, y, z) {
+    const sx = x * 0.7 + canvas.width / 2 - 350;
+    const sy = canvas.height / 2 - (y * 0.5) - z * 0.3;
+
+    ctx.fillStyle = isNight ? "#aaa" : "#444";
+    ctx.fillRect(sx - 12, sy - 6, 24, 12);
+
+    ctx.strokeStyle = isNight ? "#a0f0ff" : "#00d2ff";
+    ctx.beginPath();
+    ctx.moveTo(sx - 20, sy);
+    ctx.lineTo(sx + 20, sy);
+    ctx.stroke();
+
+    ctx.fillStyle = isNight ? "#ffc300" : "#ff9900";
+    ctx.beginPath();
+    ctx.arc(sx - 14, sy - 12, 4, 0, Math.PI * 2);
+    ctx.arc(sx + 14, sy - 12, 4, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  function drawScene(cars) {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    const weather = document.getElementById('weather').value;
+
+    if (weather === "fog") {
+      ctx.fillStyle = "rgba(220,220,220,0.3)";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+    } else if (weather === "rain") {
+      ctx.strokeStyle = isNight ? 'rgba(180, 220, 255, 0.8)' : 'rgba(0,0,150,0.9)';
+      for (let i = 0; i < 200; i++) {
+        const x = Math.random() * canvas.width;
+        const y = Math.random() * canvas.height;
+        ctx.beginPath();
+        ctx.moveTo(x, y);
+        ctx.lineTo(x, y + 10);
+        ctx.stroke();
+      }
+    } else if (weather === "wind") {
+      ctx.fillStyle = "rgba(255,255,255,0.05)";
+      for (let i = 0; i < 100; i++) {
+        const x = Math.random() * canvas.width;
+        const y = Math.random() * canvas.height;
+        ctx.beginPath();
+        ctx.arc(x, y, 1.5, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+
+    cars.forEach(car => {
+      const [x, y, z] = car;
+      drawFlyingCar(ctx, x, y, z);
+    });
+  }
+
+  function simulateOnce() {
+    const numCars = parseInt(document.getElementById('numCars').value);
+    const { starts, ends } = generateRandomCars(numCars);
+
+    const steps = 60;
+    simulationFrames = [];
+    for (let i = 0; i <= steps; i++) {
+      simulationFrames.push(
+        starts.map((start, idx) =>
+          start.map((val, j) => val + ((ends[idx][j] - val) * i / steps))
+        )
+      );
+    }
+
+    currentFrame = 0;
+  }
+
+  function startDynamicSim() {
+    if (dynamicSimInterval) clearInterval(dynamicSimInterval);
+    simulateOnce();
+    isSimulating = true;
+
+    dynamicSimInterval = setInterval(() => {
+      simulateOnce();
+    }, 3000);
+
+    requestAnimationFrame(animate);
+  }
+
+  function stopSim() {
+    isSimulating = false;
+    clearInterval(dynamicSimInterval);
+  }
+
+  function animate() {
+    if (!isSimulating) return;
+
+    drawScene(simulationFrames[currentFrame]);
+
+    currentFrame++;
+    if (currentFrame >= simulationFrames.length) {
+      currentFrame = simulationFrames.length - 1;
+    }
+
+    requestAnimationFrame(animate);
+  }
+
+  window.addEventListener('resize', () => {
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+  });
+</script>
+
+</body>
+</html>

@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Flying Car Simulation</title>
+    <style>
+        body {
+            background: #000;
+            margin: 0;
+            overflow: hidden;
+        }
+
+        canvas {
+            display: block;
+            background: #111;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="simulationCanvas"></canvas>
+
+    <script>
+        const canvas = document.getElementById("simulationCanvas");
+        const ctx = canvas.getContext("2d");
+
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+
+        const scale = 0.5; // To scale the position values to screen
+        const carSize = 30;
+        const carImage = new Image();
+        carImage.src = '/static/car.jpg'; // Path to the car image in the static folder
+
+        let positions = [];
+        let frame = 0;
+        let weather = 'clear';
+
+        // Change the weather based on the selection in the setup form
+        async function fetchData() {
+            const response = await fetch("/simulate");
+            const data = await response.json();
+            positions = data.positions;
+            weather = data.weather;
+        }
+
+        function draw() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // Apply weather effects
+            if (weather === 'rain') {
+                drawRain();
+            } else if (weather === 'fog') {
+                drawFog();
+            } else if (weather === 'wind') {
+                drawWind();
+            }
+
+            if (positions.length > 0 && frame < positions.length) {
+                const currentFrame = positions[frame];
+
+                currentFrame.forEach((pos, i) => {
+                    const [x, y, z] = pos;
+                    const drawX = x * scale % canvas.width;
+                    const drawY = y * scale % canvas.height;
+
+                    ctx.drawImage(carImage, drawX - carSize / 2, drawY - carSize / 2, carSize, carSize); // Drawing the car
+                });
+
+                frame++;
+            }
+
+            requestAnimationFrame(draw);
+        }
+
+        function drawRain() {
+            ctx.fillStyle = 'rgba(0,0,255,0.5)';
+            for (let i = 0; i < 150; i++) {
+                let x = Math.random() * canvas.width;
+                let y = Math.random() * canvas.height;
+                ctx.beginPath();
+                ctx.moveTo(x, y);
+                ctx.lineTo(x + 2, y + 10);
+                ctx.stroke();
+            }
+        }
+
+        function drawFog() {
+            ctx.fillStyle = 'rgba(240,240,240,0.2)';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+        }
+
+        function drawWind() {
+            ctx.fillStyle = 'rgba(200,200,200,0.2)';
+            for (let i = 0; i < 100; i++) {
+                ctx.beginPath();
+                ctx.arc(Math.random() * canvas.width, Math.random() * canvas.height, 2, 0, 2 * Math.PI);
+                ctx.fill();
+            }
+        }
+
+        fetchData().then(draw);
+    </script>
+</body>
+</html>
